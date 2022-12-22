@@ -62,7 +62,6 @@ struct Wlwin {
 	struct wl_surface *surface;
 	struct wl_surface *cursorsurface;
 	struct xdg_wm_base *xdg_wm_base;
-	struct xdg_toplevel *xdg_toplevel;
 	struct wl_shm_pool *pool;
 	struct wl_buffer *screenbuffer;
 	struct wl_buffer *cursorbuffer;
@@ -75,8 +74,6 @@ struct Wlwin {
 	/* Keyboard state */
 	struct xkb_state *xkb_state;
 	struct xkb_context *xkb_context;
-
-	struct zxdg_decoration_manager_v1 *decoman;
 
 	struct zwp_primary_selection_device_manager_v1 *primsel;
 	struct zwp_primary_selection_device_v1 *primsel_device;

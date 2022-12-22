@@ -93,7 +93,6 @@ dispatchproc(void *a)
 	Wlwin *wl;
 	wl = a;
 	while(wl->runing){
-		//wl_display_dispatch(wl->display);
 		libdecor_dispatch(wl->decor_context, -1);
 	}
 }
@@ -112,7 +111,6 @@ wlattach(char *label)
 
 	memimageinit();
 	wlsetcb(wl);
-	//wlflush(wl);
 	wlsettitle(wl, label);
 
 	r = Rect(0, 0, wl->dx, wl->dy);
@@ -124,11 +122,6 @@ wlattach(char *label)
 	wl->runing = 1;
 	kproc("wldispatch", dispatchproc, wl);
 	terminit();
-	/*
-	qlock(&drawlock);
-	wlflush(wl);
-	qunlock(&drawlock);
-	*/
 	return wl;
 }
 

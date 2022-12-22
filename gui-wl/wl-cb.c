@@ -45,31 +45,6 @@ const struct xdg_surface_listener xdg_surface_listener = {
 	.configure = xdg_surface_handle_configure,
 };
 
-static void
-xdg_toplevel_handle_close(void *data, struct xdg_toplevel *xdg_toplevel)
-{
-	Wlwin *wl;
-	wl = data;
-	wl->runing = 0;
-	exits(nil);
-}
-
-static void
-xdg_toplevel_handle_configure(void *data, struct xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, struct wl_array *states)
-{
-	Wlwin *wl;
-
-	wl = data;
-	if(width == 0 || height == 0 || (width == wl->dx && height == wl->dy))
-		return;
-	wlresize(wl, width, height);
-}
-
-const struct xdg_toplevel_listener xdg_toplevel_listener = {
-	.configure = xdg_toplevel_handle_configure,
-	.close = xdg_toplevel_handle_close,
-};
-
 static const struct wl_callback_listener wl_surface_frame_listener;
 
 static void
@@ -598,6 +573,16 @@ static const struct wl_data_device_listener data_device_listener = {
 };
 
 static void
+xdg_wm_base_ping(void *data, struct xdg_wm_base *xdg_wm_base, uint32_t serial)
+{
+	xdg_wm_base_pong(xdg_wm_base, serial);
+}
+
+static const struct xdg_wm_base_listener xdg_wm_base_listener = {
+	.ping = xdg_wm_base_ping,
+};
+
+static void
 mode(void *data, struct wl_output*, uint, int x, int y, int)
 {
 	Wlwin *wl;
@@ -642,6 +627,9 @@ handle_global(void *data, struct wl_registry *registry, uint32_t name, const cha
 		wl->primsel_device = zwp_primary_selection_device_manager_v1_get_device(wl->primsel, wl->seat);
 	} else if(strcmp(interface, wl_compositor_interface.name) == 0) {
 		wl->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
+	} else if(strcmp(interface, xdg_wm_base_interface.name) == 0) {
+		wl->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+		xdg_wm_base_add_listener(wl->xdg_wm_base, &xdg_wm_base_listener, wl);
 	} else if(strcmp(interface, wl_data_device_manager_interface.name) == 0) {
 		wl->data_device_manager = wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
 	} else if(strcmp(interface, zwp_primary_selection_device_manager_v1_interface.name) == 0) {
@@ -732,9 +720,8 @@ void
 wlsetcb(Wlwin *wl)
 {
 	struct wl_registry *registry;
-	//struct xdg_surface *xdg_surface;
+	struct xdg_surface *xdg_surface;
 	struct wl_callback *cb;
-	//struct zxdg_toplevel_decoration_v1 *deco;
 
 	//Wayland doesn't do keyboard repeat, but also may
 	//not tell us what the user would like, so we
@@ -748,18 +735,19 @@ wlsetcb(Wlwin *wl)
 	wl_display_roundtrip(wl->display);
 	wl->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
-	if(wl->shm == nil || wl->compositor == nil || wl->seat == nil || wl->primsel == nil)
+	if(wl->shm == nil || wl->compositor == nil || wl->xdg_wm_base == nil || wl->seat == nil || wl->primsel == nil)
 		sysfatal("registration fell short");
 
 	wlallocbuffer(wl);
 	wl->surface = wl_compositor_create_surface(wl->compositor);
+	xdg_surface = xdg_wm_base_get_xdg_surface(wl->xdg_wm_base, wl->surface);
+	xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, wl);
 
 	wl->decor_context = libdecor_new(wl->display, &decor_iface);
 	wl->decor_frame = libdecor_decorate(wl->decor_context, wl->surface, &decor_frame_iface, wl);
 	libdecor_frame_set_app_id(wl->decor_frame, "drawterm");
 	libdecor_frame_map(wl->decor_frame);
 
-	//wl_surface_commit(wl->surface);
 	wl_display_roundtrip(wl->display);
 
 	cb = wl_surface_frame(wl->surface);
@@ -769,7 +757,6 @@ wlsetcb(Wlwin *wl)
 void
 wlsettitle(Wlwin *wl, char *s)
 {
-	//xdg_toplevel_set_title(wl->xdg_toplevel, s);
 	libdecor_frame_set_title(wl->decor_frame, s);
 }
 
