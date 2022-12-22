@@ -693,7 +693,10 @@ frame_configure(struct libdecor_frame *frame, struct libdecor_configuration *cfg
 	state = libdecor_state_new(width, height);
 	libdecor_frame_commit(frame, state, cfg);
 	libdecor_state_free(state);
+	qlock(&drawlock);
+	wl->dirty = 1;
 	wlflush(wl);
+	qunlock(&drawlock);
 }
 
 static void
@@ -729,9 +732,9 @@ void
 wlsetcb(Wlwin *wl)
 {
 	struct wl_registry *registry;
-	struct xdg_surface *xdg_surface;
+	//struct xdg_surface *xdg_surface;
 	struct wl_callback *cb;
-	struct zxdg_toplevel_decoration_v1 *deco;
+	//struct zxdg_toplevel_decoration_v1 *deco;
 
 	//Wayland doesn't do keyboard repeat, but also may
 	//not tell us what the user would like, so we
@@ -756,7 +759,7 @@ wlsetcb(Wlwin *wl)
 	libdecor_frame_set_app_id(wl->decor_frame, "drawterm");
 	libdecor_frame_map(wl->decor_frame);
 
-	wl_surface_commit(wl->surface);
+	//wl_surface_commit(wl->surface);
 	wl_display_roundtrip(wl->display);
 
 	cb = wl_surface_frame(wl->surface);
