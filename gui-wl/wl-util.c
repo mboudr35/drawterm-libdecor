@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
+#include <libdecor.h>
 #include <linux/input-event-codes.h>
 #include <sys/types.h>
 #include <sys/mman.h>

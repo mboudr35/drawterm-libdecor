@@ -80,6 +80,10 @@ struct Wlwin {
 
 	struct zwp_primary_selection_device_manager_v1 *primsel;
 	struct zwp_primary_selection_device_v1 *primsel_device;
+
+	struct libdecor *decor_context;
+	struct libdecor_frame *decor_frame;
+	enum libdecor_window_state window_state;
 };
 
 void wlallocbuffer(Wlwin*);

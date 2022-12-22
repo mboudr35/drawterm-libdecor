@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
+#include <libdecor.h>
 #include <linux/input-event-codes.h>
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -597,16 +598,6 @@ static const struct wl_data_device_listener data_device_listener = {
 };
 
 static void
-xdg_wm_base_ping(void *data, struct xdg_wm_base *xdg_wm_base, uint32_t serial)
-{
-	xdg_wm_base_pong(xdg_wm_base, serial);
-}
-
-static const struct xdg_wm_base_listener xdg_wm_base_listener = {
-	.ping = xdg_wm_base_ping,
-};
-
-static void
 mode(void *data, struct wl_output*, uint, int x, int y, int)
 {
 	Wlwin *wl;
@@ -651,13 +642,8 @@ handle_global(void *data, struct wl_registry *registry, uint32_t name, const cha
 		wl->primsel_device = zwp_primary_selection_device_manager_v1_get_device(wl->primsel, wl->seat);
 	} else if(strcmp(interface, wl_compositor_interface.name) == 0) {
 		wl->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 1);
-	} else if(strcmp(interface, xdg_wm_base_interface.name) == 0) {
-		wl->xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
-		xdg_wm_base_add_listener(wl->xdg_wm_base, &xdg_wm_base_listener, wl);
 	} else if(strcmp(interface, wl_data_device_manager_interface.name) == 0) {
 		wl->data_device_manager = wl_registry_bind(registry, name, &wl_data_device_manager_interface, 3);
-	} else if(strcmp(interface, zxdg_decoration_manager_v1_interface.name) == 0) {
-		wl->decoman = wl_registry_bind(registry, name, &zxdg_decoration_manager_v1_interface, 1);
 	} else if(strcmp(interface, zwp_primary_selection_device_manager_v1_interface.name) == 0) {
 		wl->primsel = wl_registry_bind(registry, name, &zwp_primary_selection_device_manager_v1_interface, 1);
 	}
@@ -671,6 +657,72 @@ handle_global_remove(void *data, struct wl_registry *registry, uint32_t name)
 const struct wl_registry_listener registry_listener = {
 	.global = handle_global,
 	.global_remove = handle_global_remove,
+};
+
+static void
+handle_decor_error(struct libdecor *ctx, enum libdecor_error err, const char *msg)
+{
+	sysfatal(msg);
+}
+
+const struct libdecor_interface decor_iface = {
+	.error = handle_decor_error,
+};
+
+static void
+frame_configure(struct libdecor_frame *frame, struct libdecor_configuration *cfg, void *data)
+{
+	Wlwin *wl;
+	int width, height;
+	enum libdecor_window_state window_state;
+	struct libdecor_state *state;
+
+	wl = data;
+
+	if(!libdecor_configuration_get_window_state(cfg, &window_state))
+		window_state = LIBDECOR_WINDOW_STATE_NONE;
+
+	wl->window_state = window_state;
+
+	if(!libdecor_configuration_get_content_size(cfg, frame, &width, &height)){
+		width = wl->dx;
+		height = wl->dy;
+	}
+	wlresize(wl, width, height);
+
+	state = libdecor_state_new(width, height);
+	libdecor_frame_commit(frame, state, cfg);
+	libdecor_state_free(state);
+	wlflush(wl);
+}
+
+static void
+frame_close(struct libdecor_frame *frame, void *data)
+{
+	Wlwin *wl;
+	wl = data;
+	wl->runing = 0;
+	exits(nil);
+}
+
+static void
+frame_commit(struct libdecor_frame *frame, void *data)
+{
+	Wlwin *wl;
+	wl = data;
+	wlflush(wl);
+}
+
+static void
+frame_dismiss_popup(struct libdecor_frame *frame, const char *seat, void *data)
+{
+}
+
+const struct libdecor_frame_interface decor_frame_iface = {
+	.configure = frame_configure,
+	.close = frame_close,
+	.commit = frame_commit,
+	.dismiss_popup = frame_dismiss_popup,
 };
 
 void
@@ -693,23 +745,19 @@ wlsetcb(Wlwin *wl)
 	wl_display_roundtrip(wl->display);
 	wl->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
-	if(wl->shm == nil || wl->compositor == nil || wl->xdg_wm_base == nil || wl->seat == nil || wl->decoman == nil || wl->primsel == nil)
+	if(wl->shm == nil || wl->compositor == nil || wl->seat == nil || wl->primsel == nil)
 		sysfatal("registration fell short");
 
 	wlallocbuffer(wl);
 	wl->surface = wl_compositor_create_surface(wl->compositor);
 
-	xdg_surface = xdg_wm_base_get_xdg_surface(wl->xdg_wm_base, wl->surface);
-	wl->xdg_toplevel = xdg_surface_get_toplevel(xdg_surface);
-	deco = zxdg_decoration_manager_v1_get_toplevel_decoration(wl->decoman, wl->xdg_toplevel);
-	zxdg_toplevel_decoration_v1_set_mode(deco, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-	xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, wl);
-	xdg_toplevel_add_listener(wl->xdg_toplevel, &xdg_toplevel_listener, wl);
+	wl->decor_context = libdecor_new(wl->display, &decor_iface);
+	wl->decor_frame = libdecor_decorate(wl->decor_context, wl->surface, &decor_frame_iface, wl);
+	libdecor_frame_set_app_id(wl->decor_frame, "drawterm");
+	libdecor_frame_map(wl->decor_frame);
 
 	wl_surface_commit(wl->surface);
 	wl_display_roundtrip(wl->display);
-
-	xdg_toplevel_set_app_id(wl->xdg_toplevel, "drawterm");
 
 	cb = wl_surface_frame(wl->surface);
 	wl_callback_add_listener(cb, &wl_surface_frame_listener, wl);
@@ -718,7 +766,8 @@ wlsetcb(Wlwin *wl)
 void
 wlsettitle(Wlwin *wl, char *s)
 {
-	xdg_toplevel_set_title(wl->xdg_toplevel, s);
+	//xdg_toplevel_set_title(wl->xdg_toplevel, s);
+	libdecor_frame_set_title(wl->decor_frame, s);
 }
 
 void

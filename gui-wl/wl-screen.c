@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
+#include <libdecor.h>
 #include <linux/input-event-codes.h>
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -91,8 +92,10 @@ dispatchproc(void *a)
 {
 	Wlwin *wl;
 	wl = a;
-	while(wl->runing)
+	while(wl->runing){
 		wl_display_dispatch(wl->display);
+		libdecor_dispatch(wl->decor_context, -1);
+	}
 }
 
 static Wlwin*
